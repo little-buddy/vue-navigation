@@ -1,8 +1,8 @@
 /**
-* vue-navigation v1.1.4
-* https://github.com/zack24q/vue-navigation
-* Released under the MIT License.
-*/
+ * vue-navigation v1.1.4
+ * https://github.com/zack24q/vue-navigation
+ * Released under the MIT License.
+ */
 
 var routes = [];
 
@@ -21,8 +21,15 @@ function genKey() {
   });
 }
 
-function getKey(route, keyName) {
-  return (route.name || route.path) + '?' + route.query[keyName];
+var TAB_KEY = 'vue_navigation_tab_key';
+
+function getKey(route, keyName, tablist) {
+  // TODO 以 name 为准
+  var prefix = route.name || route.path;
+  if (tablist && tablist.indexOf(prefix) !== -1) {
+    return TAB_KEY;
+  }
+  return prefix + '?' + route.query[keyName];
 }
 
 function matches(pattern, name) {
@@ -85,28 +92,28 @@ var Navigator = (function (bus, store, moduleName, keyName) {
       mutations: {
         'navigation/FORWARD': function navigationFORWARD(state, _ref) {
           var to = _ref.to,
-              from = _ref.from,
-              name = _ref.name;
+            from = _ref.from,
+            name = _ref.name;
 
           state.routes.push(name);
         },
         'navigation/BACK': function navigationBACK(state, _ref2) {
           var to = _ref2.to,
-              from = _ref2.from,
-              count = _ref2.count;
+            from = _ref2.from,
+            count = _ref2.count;
 
           state.routes.splice(state.routes.length - count, count);
         },
         'navigation/REPLACE': function navigationREPLACE(state, _ref3) {
           var to = _ref3.to,
-              from = _ref3.from,
-              name = _ref3.name;
+            from = _ref3.from,
+            name = _ref3.name;
 
           state.routes.splice(Routes.length - 1, 1, name);
         },
         'navigation/REFRESH': function navigationREFRESH(state, _ref4) {
           var to = _ref4.to,
-              from = _ref4.from;
+            from = _ref4.from;
         },
         'navigation/RESET': function navigationRESET(state) {
           state.routes.splice(0, state.routes.length);
@@ -116,43 +123,51 @@ var Navigator = (function (bus, store, moduleName, keyName) {
   }
 
   var forward = function forward(name, toRoute, fromRoute) {
-    var to = { route: toRoute };
-    var from = { route: fromRoute };
+    var to = {route: toRoute};
+    var from = {route: fromRoute};
     var routes = store ? store.state[moduleName].routes : Routes;
 
     from.name = routes[routes.length - 1] || null;
     to.name = name;
-    store ? store.commit('navigation/FORWARD', { to: to, from: from, name: name }) : routes.push(name);
+    store ? store.commit('navigation/FORWARD', {to: to, from: from, name: name}) : routes.push(name);
     window.sessionStorage.VUE_NAVIGATION = JSON.stringify(routes);
     bus.$emit('forward', to, from);
   };
   var back = function back(count, toRoute, fromRoute) {
-    var to = { route: toRoute };
-    var from = { route: fromRoute };
+    var to = {route: toRoute};
+    var from = {route: fromRoute};
     var routes = store ? store.state[moduleName].routes : Routes;
     from.name = routes[routes.length - 1];
     to.name = routes[routes.length - 1 - count];
-    store ? store.commit('navigation/BACK', { to: to, from: from, count: count }) : routes.splice(Routes.length - count, count);
+    store ? store.commit('navigation/BACK', {
+      to: to,
+      from: from,
+      count: count
+    }) : routes.splice(Routes.length - count, count);
     window.sessionStorage.VUE_NAVIGATION = JSON.stringify(routes);
     bus.$emit('back', to, from);
   };
   var replace = function replace(name, toRoute, fromRoute) {
-    var to = { route: toRoute };
-    var from = { route: fromRoute };
+    var to = {route: toRoute};
+    var from = {route: fromRoute};
     var routes = store ? store.state[moduleName].routes : Routes;
 
     from.name = routes[routes.length - 1] || null;
     to.name = name;
-    store ? store.commit('navigation/REPLACE', { to: to, from: from, name: name }) : routes.splice(Routes.length - 1, 1, name);
+    store ? store.commit('navigation/REPLACE', {
+      to: to,
+      from: from,
+      name: name
+    }) : routes.splice(Routes.length - 1, 1, name);
     window.sessionStorage.VUE_NAVIGATION = JSON.stringify(routes);
     bus.$emit('replace', to, from);
   };
   var refresh = function refresh(toRoute, fromRoute) {
-    var to = { route: toRoute };
-    var from = { route: fromRoute };
+    var to = {route: toRoute};
+    var from = {route: fromRoute};
     var routes = store ? store.state[moduleName].routes : Routes;
     to.name = from.name = routes[routes.length - 1];
-    store ? store.commit('navigation/REFRESH', { to: to, from: from }) : null;
+    store ? store.commit('navigation/REFRESH', {to: to, from: from}) : null;
     bus.$emit('refresh', to, from);
   };
   var reset = function reset() {
@@ -182,7 +197,7 @@ var Navigator = (function (bus, store, moduleName, keyName) {
   };
 });
 
-var NavComponent = (function (keyName) {
+var NavComponent = (function (keyName, tablist) {
   return {
     name: 'navigation',
     abstract: true,
@@ -196,6 +211,12 @@ var NavComponent = (function (keyName) {
     watch: {
       routes: function routes(val) {
         for (var key in this.cache) {
+
+          var matchStr = key.match(/([\S]+)\?/)
+          if (key === TAB_KEY || matchStr !== null && tablist.indexOf(matchStr[1]) > -1) {
+            continue;
+          }
+
           if (!matches(val, key)) {
             var vnode = this.cache[key];
             vnode && vnode.componentInstance.$destroy();
@@ -218,8 +239,8 @@ var NavComponent = (function (keyName) {
       if (vnode) {
         vnode.key = vnode.key || (vnode.isComment ? 'comment' : vnode.tag);
 
-        var key = getKey(this.$route, keyName);
-        if (vnode.key.indexOf(key) === -1) {
+        var key = getKey(this.$route, keyName, tablist);
+        if (vnode.key.indexOf(key) === -1 && key !== TAB_KEY) {
           vnode.key = '__navigation-' + key + '-' + vnode.key;
         }
         if (this.cache[key]) {
@@ -239,20 +260,37 @@ var NavComponent = (function (keyName) {
   };
 });
 
-var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+var _extends = Object.assign || function (target) {
+  for (var i = 1; i < arguments.length; i++) {
+    var source = arguments[i];
+    for (var key in source) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) {
+        target[key] = source[key];
+      }
+    }
+  }
+  return target;
+};
 
-function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+function _defineProperty(obj, key, value) {
+  if (key in obj) {
+    Object.defineProperty(obj, key, {value: value, enumerable: true, configurable: true, writable: true});
+  } else {
+    obj[key] = value;
+  }
+  return obj;
+}
 
 var index = {
   install: function install(Vue) {
     var _ref = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {},
-        router = _ref.router,
-        store = _ref.store,
-        _ref$moduleName = _ref.moduleName,
-        moduleName = _ref$moduleName === undefined ? 'navigation' : _ref$moduleName,
-        _ref$keyName = _ref.keyName,
-        keyName = _ref$keyName === undefined ? 'VNK' : _ref$keyName;
-
+      router = _ref.router,
+      store = _ref.store,
+      _ref$moduleName = _ref.moduleName,
+      moduleName = _ref$moduleName === undefined ? 'navigation' : _ref$moduleName,
+      _ref$keyName = _ref.keyName,
+      keyName = _ref$keyName === undefined ? 'VNK' : _ref$keyName,
+      tablist = _ref.tablist || [];
     if (!router) {
       console.error('vue-navigation need options: router');
       return;
@@ -277,7 +315,7 @@ var index = {
         } else {
           query[keyName] = genKey();
         }
-        next({ name: to.name, params: to.params, query: query, replace: replaceFlag || !from.query[keyName] });
+        next({name: to.name, params: to.params, query: query, replace: replaceFlag || !from.query[keyName]});
       } else {
         next();
       }
@@ -288,7 +326,7 @@ var index = {
       replaceFlag = false;
     });
 
-    Vue.component('navigation', NavComponent(keyName));
+    Vue.component('navigation', NavComponent(keyName, tablist));
 
     Vue.navigation = Vue.prototype.$navigation = {
       on: function on(event, callback) {
